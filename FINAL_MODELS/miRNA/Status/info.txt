@@ -1,0 +1,31 @@
+
+
+
+
+
+### final model with 50 reps
+"/ix/djishnu/Marisa/ABomics/pitt_cohort/final_datasets/yaml/group_mirna_36_0.01_0.5_0.1.yaml"
+
+
+
+
+
+
+
+########
+mirna_group_yaml <- "/ix/djishnu/Marisa/ABomics/pitt_cohort/mirna_36/yaml_group/group_0.01_0.5.yaml"
+canada_mirna_x = "/ix/djishnu/Marisa/ABomics/canada_cohort/Data/mirna_31/mirna_x.csv"
+canada_mirna_y = "/ix/djishnu/Marisa/ABomics/canada_cohort/Data/mirna_31/mirna_group_y.csv" 
+
+# MARGINALS ("Z69", "Z103", "Z105"),
+mirna_group <- load_data_cp(yaml_path = mirna_group_yaml, 
+                            val_x = canada_mirna_x,
+                            val_y = canada_mirna_y, interactions = FALSE, scale = TRUE)
+
+
+# MARGINALS + INTERACTIONS
+mirna_group_int <- load_data_cp(yaml_path = mirna_group_yaml, 
+                                val_x = canada_mirna_x,
+                                val_y = canada_mirna_y, interactions = TRUE, scale = TRUE)
+
+
