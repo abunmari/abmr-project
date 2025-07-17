@@ -1,0 +1,1 @@
+slurmstepd: error: *** JOB 3000710 ON htc-n40 CANCELLED AT 2024-03-24T12:11:00 DUE TO TIME LIMIT ***

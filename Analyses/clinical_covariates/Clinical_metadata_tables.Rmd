@@ -1,0 +1,46 @@
+#  code to create clinical summary table
+
+```{r}
+library(gtsummary)
+```
+
+```{r}
+pitt_meta <- read.csv("/ix/djishnu/Marisa/ABomics/pitt_cohort/meta_5_10.csv",row.names=1)
+pitt_meta$GRP <- factor(pitt_meta$GRP, labels = c("ABMR", "DSA"))
+pitt_meta$Y_time<- factor(pitt_meta$Y_time, labels = c("Early", "Late"))
+```
+
+# Pitt clinical characteristics summary table (categorical)
+```{r}
+summary_table <- pitt_meta %>%
+select( GRP, GENDER, AGEATTX, Tx.number, PRIMARY_DIAGNOSIS_AT_TRANSPLANT, BMI_AT_TRANSPLANT) %>%
+  tbl_summary(by = GRP, missing = "no") %>%
+  add_overall() %>%
+  add_n() %>%
+  modify_header(label = "**Variable**") %>%
+  modify_caption("**Table 1. Pittsburgh Patient Characteristics**") %>%
+  bold_labels() %>%
+  as_gt()
+
+# Print the summary table
+summary_table
+#gtsave(summary_table, "/ix/djishnu/Marisa/ABomics/pitt_cohort/Figures/pitt_clinicaL_characteristics_table.html")
+
+```
+
+
+# Pitt clinical summary table (clinical metrics )
+```{r}
+summary_table <- pitt_meta %>%
+select( GRP, Sample.to.Tx..mo., Y_time, FK.at.sample, MMF.at.sample ,  PREDNISONE.at.sample ) %>%
+  tbl_summary(by = GRP, missing = "no") %>%
+  add_p() %>%
+  add_overall() %>%
+  modify_header(label = "**Variable**")%>%
+  as_gt()
+
+# Print the summary table
+summary_table
+
+#gtsave(summary_table, "/ix/djishnu/Marisa/ABomics/pitt_cohort/Figures/pitt_sample_table.html")
+```

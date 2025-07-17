@@ -1,0 +1,120 @@
+```{r}
+setwd("~/JishnuLab/ABomics_cleaned")
+source("Analyses/correlation/Z_score_cocor.R")
+source("Analyses/correlation/Helper_fx.R")
+source("Analyses/load_data.R")
+#source("~/JishnuLab/ABomics_7_10/pitt_cohort/antigens/Plotting_helper_fxns.R")
+
+
+X1 = early_r
+X2 = early_nr
+X3 = late_r
+X4 = late_nr
+```
+
+
+# Using Fisher Z test to determine if two correlations are significantly different
+# ALL FEATURES
+# sig_diff_z_test(data1, data2)
+```{r}
+# X1  = early_r v. X2 = early_nr
+X1_X2 = sig_diff_z_test(X1, X2)
+# X1 = early_r v X3 = late_r
+X1_X3 = sig_diff_z_test(X1, X3)
+# X3 = late_r v X4 = late_nr
+X3_X4 = sig_diff_z_test(X3, X4)
+# X2 = early_nr v. X4 late_nr
+X2_X4 = sig_diff_z_test(X2, X4)
+
+```
+
+
+
+# plotting significant results 
+```{r}
+
+# EARLY (R vs NR)
+# X1  = early_r v. X2 = early_nr
+filtered_matrices <- filter_results(X1_X2 , 4, 0.05)
+plot_hm_star(filtered_matrices, F)
+plot_hm_star(filtered_matrices, T) 
+
+# REJECTOR (Early vs Late)
+# X1 = early_r v X3 = late_r
+filtered_matrices <- filter_results(X1_X3 , 4, 0.05)
+#plot_hm_star(filtered_matrices, F)
+plot_hm_star(filtered_matrices, T)
+
+# LATE (R vs NR)
+#X3late_r v X4 = late_nr
+filtered_matrices <- filter_results(X3_X4 , 4, 0.05)
+plot_hm_star(filtered_matrices, F)
+
+# NR (Early vs Late)
+# X2 = early_nr v. X4 late_nr
+filtered_matrices <- filter_results(X2_X4 , 4, 0.05)
+plot_hm_star(filtered_matrices, T)
+
+
+```
+
+# Using Fisher Z test to determine if two correlations are significantly different
+# Using Early or Late features from SLIDE 
+```{r}
+# X1 = early_r v X3 = late_r (late feat)
+X1_X3_lf_late = sig_diff_z_test(X1[,late_feats], X3[,late_feats])
+filtered_matrices <- filter_results(X1_X3_lf_late , 4, 0.05)
+plot_hm_star(filtered_matrices, T) 
+
+# No significant results below -------
+
+# X2 = early_nr v. X4 late_nr (late feat)
+X2_X4_lf_late= sig_diff_z_test(X2[,late_feats], X4[,late_feats])
+filtered_matrices <- filter_results(X2_X4_lf_late , 4, 0.05)
+
+# X1  = early_r v. X2 = early_nr (early_feats) -- NOTHING SIGNIFICANT
+X1_X2_lf_early = sig_diff_z_test(X1[,early_feats], X2[,early_feats])
+filtered_matrices <- filter_results(X1_X2_lf_early , 4, 0.05)
+plot_hm_star(filtered_matrices, T) 
+
+# X2 = early_nr v. X4 late_nr (early feat) -- NOTHING SIGNIFICANT
+X2_X4_lf_early = sig_diff_z_test(X2[,early_feats], X4[,early_feats])
+filtered_matrices <- filter_results(X2_X4_lf_early , 4, 0.05)
+plot_hm_star(filtered_matrices, T) 
+
+# X3 = late r v. X4 late_nr (late feat) -- NOTHING SIGNIFICANT
+filtered_matrices <- filter_results(X3_X4_lf_late , 4, 0.05) 
+X3_X4_lf_late = sig_diff_z_test(X3[,late_feats], X4[,late_feats])
+
+```
+
+# Using both early AND Late features 
+```{r}
+all_feats = c(early_feats, late_feats)
+
+# X1 = early_r v X3 = late_r 
+X1_X3_lf= sig_diff_z_test(X1[,all_feats], X3[,all_feats])
+filtered_matrices <- filter_results(X1_X3_lf , 4, 0.05)
+plot_hm_star(filtered_matrices, F) 
+# C1Q ClassI and IgG3 ClassI:
+## negatively correlated in early rejectors
+## highly positicely correlated in late rejectors
+
+
+# No significant results below -------
+
+# X2 = early_nr v. X4 late_nr  - NS
+X2_X4_lf= sig_diff_z_test(X2[,all_feats], X4[,all_feats])
+filtered_matrices <- filter_results(X2_X4_lf , 4, 0.05)
+print(filtered_matrices)
+
+# X1  = early_r v. X2 = early_nr  - NS
+X1_X2_lf= sig_diff_z_test(X1[,all_feats], X2[,all_feats])
+filtered_matrices <- filter_results(X1_X2_lf , 4, 0.05)
+print(filtered_matrices)
+
+# X3 = late r v. X4 late_nr (late feat) - NS
+X3_X4_lf= sig_diff_z_test(X3[,all_feats], X4[,all_feats])
+filtered_matrices <- filter_results(X3_X4_lf , 4, 0.05)
+print(filtered_matrices)
+```

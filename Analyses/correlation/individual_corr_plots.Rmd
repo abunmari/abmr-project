@@ -1,0 +1,184 @@
+```{r}
+setwd("~/JishnuLab/ABomics_cleaned/")
+source("Analyses/load_data.R")
+source("~/JishnuLab/ABomics_cleaned/Analyses/antigens/plotting_codes/Plotting_helper_fxns.R")
+source("Analyses/correlation/Z_score_cocor.R")
+
+library(ComplexHeatmap)
+library(corrplot)
+
+## sort features###################
+sort_features <- function(features) {
+  ig_features <- sort(features[grepl("^Ig", features)])
+  c1q_features <- sort(features[grepl("^C1Q", features)])
+  fcr_features <- sort(features[grepl("^FcR", features)])
+  
+  return(c(ig_features, c1q_features, fcr_features))
+}
+
+### function for pval stars #####################
+labs.function <- function(x) {
+  case_when(
+    is.na(x) ~ "",  
+    x == 0 ~ "",       # Return an empty string for NA values
+    # Return an empty string for NA values
+    x >= 0.05 ~ "",      # No asterisk for p-values >= 0.05
+    x < 0.05 & x >= 0.01 ~ "*",    # One asterisk for p-values < 0.05 and >= 0.01
+    x < 0.01 & x >= 0.001 ~ "**",  # Two asterisks for p-values < 0.01 and >= 0.001
+    x < 0.001 ~ "***"    # Three asterisks for p-values < 0.001
+  )
+}
+
+### corr m ptest ################################################
+cor.mtest <- function(mat, ...) {
+  mat <- as.matrix(mat)
+  n <- ncol(mat)
+  p.mat<- matrix(NA, n, n)
+  diag(p.mat) <- 0
+  for (i in 1:(n - 1)) {
+    for (j in (i + 1):n) {
+      tmp <- cor.test(mat[, i], mat[, j], ...)
+      p.mat[i, j] <- p.mat[j, i] <- tmp$p.value
+    }
+  }
+  colnames(p.mat) <- rownames(p.mat) <- colnames(mat)
+  p.mat
+}
+
+### corrplot fx ################################################
+
+AB_corrplot <- function(data, thresh){
+  col_fun <- colorRamp2(c(-1, 0, 1), c("blue", "white", "red"))
+  M <- cor(data, method = "spearman")
+  p.mat <- cor.mtest(data, method = "spearman", exact = NULL)
+  # Specialized the insignificant value according to the significant level
+  plot <- corrplot(M, type="lower", insig = "label_sig", diag= F,
+                 p.ma = p.mat, sig.level = thresh,col = col_fun,
+                # cl.lim=c(-1,0,1), col=colorRampPalette(c("blue","white","red")(200)),
+                 tl.col="black", tl.srt=45 )
+  plot
+}
+
+##################################################################################
+AB_heatmap<- function(sub, thresh = NULL){
+  corr_mat <- cor(scale(sub), method = 'spearman')
+  col_fun <- colorRamp2(c(-1, 0, 1), c("blue", "white", "red"))
+  
+  probes_c = remove_suffix(colnames(corr_mat))
+  probes_r = remove_suffix(rownames(corr_mat))
+  p_mat <- cor.mtest(corr_mat, method = "spearman", exact = NULL)
+  corr_mat[p_mat > thresh |is.na(p_mat)] <- NA
+  
+  if(is.null(thresh)){
+    
+    asterisk_matrix <- apply(p_mat, MARGIN = c(1, 2), labs.function)
+    heatmap <- Heatmap(
+      corr_mat,
+      col = col_fun,
+      name = "Spearman \n correlation",
+      row_split = probes_r,
+      column_split = probes_c, 
+      show_row_dend = FALSE,
+      show_column_dend = FALSE,
+      cluster_columns = FALSE,
+      cluster_rows = FALSE,
+      na_col = "#ededed",
+      rect_gp = gpar(col = "black", lwd = 1),
+      #cell_fun = draw_asterisks , # Add the custom function for asterisks
+      row_title_rot = 0
+    ) 
+    heatmap
+  }else{ heatmap <- Heatmap(
+      corr_mat,
+      col = col_fun,
+      name = "Spearman \n correlation",
+      row_split = probes_r,
+      column_split = probes_c, 
+      show_row_dend = FALSE,
+      show_column_dend = FALSE,
+      cluster_columns = FALSE,
+      cluster_rows = FALSE,
+      na_col = "#ededed",
+      rect_gp = gpar(col = "black", lwd = 1),
+      row_title_rot = 0)
+    heatmap
+  }
+}
+
+# load datasets
+X1 = early_r
+X2 = early_nr
+X3 = late_r
+X4 = late_nr
+r_group = rbind(X1, X3)
+nr_group = rbind(X2, X4)
+
+early_group = rbind(X1, X2)
+late_group = rbind(X3, X4)
+```
+# EARLY (early_feats)
+# "IgM_ClassI.6.24." "IgM_ClassI.5.19." "SNA_ClassI.5"     "SNA_ClassI.10"   
+#[5] "SNA_ClassII.3"  
+```{r}
+# late timepoint
+e_f = rownames(filtered_list$enrich_mtx)
+earlyNR_ef <- X2 %>% select(e_f) # non rejectors igm-c1q
+earlyR_ef <- X1 %>% select(e_f) # non rejectors igm-c1q igm-c1q
+
+# plots
+p1_NR<- AB_heatmap(earlyNR_ef, thresh=0.01)
+p2_R <-  AB_heatmap(earlyR_ef, thresh=0.01)
+draw(p1_NR + p2_R, column_title = " Late Non Rejectors vs. Late Rejectors ",ht_gap = unit(0.5, "cm"))
+```
+
+# Late: C1Q & IGM, NR vs. R
+```{r}
+# late timepoint
+#lateNR_IC <- X4 %>% select( starts_with("C1Q"), starts_with("IgM")) # non rejectors igm-c1q
+#lateR_IC <- X3 %>% select( starts_with("C1Q"), starts_with("IgM")) # rejectors igm-c1q
+l_f = rownames(filtered_list$enrich_mtx)
+
+lateNR_IC <- X4 %>% select( l_f) # non rejectors igm-c1q
+lateR_IC <- X3 %>% select( l_f) # rejectors igm-c1q
+# plots
+p1_NR<- AB_heatmap(lateNR_IC, thresh = 0.05)
+p2_R <-  AB_heatmap(lateR_IC, thresh = 0.05)
+
+
+folder = "~/JishnuLab/ABomics_cleaned/Analyses/antigens/figures/"
+name = "late_c1q_igm_slide_NR_R.pdf"
+pdf(paste0(folder,name), width = 11, height = 6)  # Specify file name and dimensions
+draw(p1_NR + p2_R, column_title = " Late Non Rejectors vs. Late Rejectors",ht_gap = unit(0.5, "cm"))
+dev.off()  # Close the PDF device
+# # # 
+
+```
+
+```{r}
+l_f = rownames(filtered_list$enrich_mtx)
+
+lateNR_IC <- X4 %>% select( l_f) # non rejectors igm-c1q
+lateR_IC <- X3 %>% select( l_f) # rejectors igm-c1q
+# plots
+p1_NR<- AB_heatmap(lateNR_IC, thresh = 0.05)
+p2_R <-  AB_heatmap(lateR_IC, thresh = 0.05)
+
+
+folder = "~/JishnuLab/ABomics_cleaned/Analyses/antigens/figures/"
+name = "late_fcr_slide_NR_R.pdf"
+pdf(paste0(folder,name), width = 6, height = 3.5s)  # Specify file name and dimensions
+draw(p1_NR + p2_R, column_title = " Late Non Rejectors vs. Late Rejectors",ht_gap = unit(0.5, "cm"))
+dev.off()  # Close the PDF device
+# # # 
+```
+
+
+# Late: all features
+```{r}
+# late timepoint
+# plots
+p1_NR<- AB_heatmap(X4, thresh=0.001)
+p2_R <- AB_heatmap(X3, thresh=0.001)
+draw(p1_NR + p2_R, column_title = " Late Non Rejectors vs. Late Rejectors (p < 0.001)",ht_gap = unit(0.5, "cm"))
+```
+

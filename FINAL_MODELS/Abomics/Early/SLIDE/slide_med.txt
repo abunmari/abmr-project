@@ -1,0 +1,2 @@
+SLIDE_median SLIDE_median_permuted p_val
+0.7125 0.575 2.71112153953751e-07
