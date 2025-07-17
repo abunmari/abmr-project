@@ -3,7 +3,7 @@ antigens
 - ag mini-pool data & patient serotype data 
   - probe-ag mapping
   - patient serotype data (including historical)
-- antigen enrichment analysis (trirupa)
+- antigen enrichment analysis 
 - heatmap code for enrichment analysis
 
 cross_preds
