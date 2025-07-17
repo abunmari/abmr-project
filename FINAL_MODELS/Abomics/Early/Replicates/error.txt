@@ -1,0 +1,1 @@
+/var/spool/slurmd/job3929062/slurm_script: line 17: /ix/djishnu/Marisa/ABomics/FINAL_MODELS/Abomics/Early/Replicates/run_CV.Rout: Permission denied

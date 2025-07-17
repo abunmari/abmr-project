@@ -1,0 +1,31 @@
+---
+x_path: /ix/djishnu/Marisa/ABomics/FINAL_MODELS/Abomics/Early/x.csv
+y_path: /ix/djishnu/Marisa/ABomics/FINAL_MODELS/Abomics/Early/y.csv
+z_path: /ix/djishnu/Marisa/ABomics/FINAL_MODELS/Abomics/Early/Replicates/SLIDE/z_matrix.csv
+out_path: /ix/djishnu/Marisa/ABomics/FINAL_MODELS/Abomics/Early/Replicates/SLIDE/
+k: 18
+delta: 0.1
+lambda: 0.5
+y_factor: true
+y_levels:
+  - 0
+  - 1
+rep_cv: 50
+nreps: 100
+eval_type: auc
+alpha_level: 0.05
+thresh_fdr: 0.5
+lasso: false
+pcr: false
+plsr: false
+std_cv: true
+std_y: true
+permute: true
+fdr: 0.1
+f_size: 13
+benchmark: false
+spec: 0.1
+niter: 10000
+do_interacts: false
+num_top_feats: 10
+parallel: true
