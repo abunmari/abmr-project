@@ -1,0 +1,747 @@
+```{r}
+# ~/JishnuLab/ABomics_cleaned/Analyses/antigens/plotting_codes/enrichment_early_simplified.R
+
+setwd("~/JishnuLab/ABomics_cleaned/")
+#source("Analyses/correlation/Z_score_cocor.R")
+source("Analyses/correlation/Helper_fx.R")
+source("Analyses/load_data.R")
+source("~/JishnuLab/ABomics_cleaned/Analyses/antigens/plotting_codes/Plotting_helper_fxns.R")
+colors = c("#EECA59", "#CA4F73")
+
+library(RColorBrewer)
+library(ComplexHeatmap)
+library(circlize)
+library(dplyr)
+library(tidyr)
+library(readr)
+library(Hmisc)
+library(corrplot)
+
+### function for pval stars #####################
+labs.function <- function(x) {
+  case_when(
+    is.na(x) ~ "",  
+    x == 0 ~ "",       # Return an empty string for NA values
+    # Return an empty string for NA values
+    x >= 0.05 ~ "",      # No asterisk for p-values >= 0.05
+    x < 0.05 & x >= 0.01 ~ "*",    # One asterisk for p-values < 0.05 and >= 0.01
+    x < 0.01 & x >= 0.001 ~ "**",  # Two asterisks for p-values < 0.01 and >= 0.001
+    x < 0.001 ~ "***"    # Three asterisks for p-values < 0.001
+  )
+}
+
+### corr m ptest ################################################
+cor.mtest <- function(mat, ...) {
+  mat <- as.matrix(mat)
+  n <- ncol(mat)
+  p.mat<- matrix(NA, n, n)
+  diag(p.mat) <- 0
+  for (i in 1:(n - 1)) {
+    for (j in (i + 1):n) {
+      tmp <- cor.test(mat[, i], mat[, j], ...)
+      p.mat[i, j] <- p.mat[j, i] <- tmp$p.value
+    }
+  }
+  colnames(p.mat) <- rownames(p.mat) <- colnames(mat)
+  p.mat
+}
+
+### corrplot fx ################################################
+AB_corrplot <- function(data, thresh){
+  col_fun <- colorRamp2(c(-1, 0, 1), c("blue", "white", "red"))
+  M <- cor(data, method = "spearman")
+  p.mat <- cor.mtest(data, method = "spearman", exact = NULL)
+  # Specialized the insignificant value according to the significant level
+  plot <- corrplot(M, type="lower", insig = "label_sig", diag= F,
+                 p.ma = p.mat, sig.level = thresh,col = col_fun,
+                # cl.lim=c(-1,0,1), col=colorRampPalette(c("blue","white","red")(200)),
+                 tl.col="black", tl.srt=45 )
+  plot
+}
+
+##################################################################################
+AB_heatmap<- function(sub, thresh = NULL){
+  corr_mat <- cor(scale(sub), method = 'spearman')
+  col_fun <- colorRamp2(c(-1, 0, 1), c("blue", "white", "red"))
+  
+  probes_c = remove_suffix(colnames(corr_mat))
+  probes_r = remove_suffix(rownames(corr_mat))
+  p_mat <- cor.mtest(corr_mat, method = "spearman", exact = NULL)
+  corr_mat[p_mat > thresh |is.na(p_mat)] <- NA
+  
+  if(is.null(thresh)){
+    
+    asterisk_matrix <- apply(p_mat, MARGIN = c(1, 2), labs.function)
+    heatmap <- Heatmap(
+      corr_mat,
+      col = col_fun,
+      name = "Spearman \n correlation",
+      row_split = probes_r,
+      column_split = probes_c, 
+      show_row_dend = FALSE,
+      show_column_dend = FALSE,
+      cluster_columns = FALSE,
+      cluster_rows = FALSE,
+      na_col = "#ededed",
+      rect_gp = gpar(col = "black", lwd = 1),
+      #cell_fun = draw_asterisks , # Add the custom function for asterisks
+      row_title_rot = 0
+    ) 
+    heatmap
+  }else{ heatmap <- Heatmap(
+      corr_mat,
+      col = col_fun,
+      name = "Spearman \n correlation",
+      row_split = probes_r,
+      column_split = probes_c, 
+      show_row_dend = FALSE,
+      show_column_dend = FALSE,
+      cluster_columns = FALSE,
+      cluster_rows = FALSE,
+      na_col = "#ededed",
+      rect_gp = gpar(col = "black", lwd = 1),
+      row_title_rot = 0)
+    heatmap
+  }
+}
+
+# load datasets
+X1 = early_r
+X2 = early_nr
+X3 = late_r
+X4 = late_nr
+r_group = rbind(X1, X3)
+nr_group = rbind(X2, X4)
+
+early_group = rbind(X1, X2)
+late_group = rbind(X3, X4)
+```
+
+
+#EARLY: Probe - antigen aggregated
+```{r}
+# Load required data
+setwd("~/JishnuLab/ABomics_cleaned/Analyses/antigens/")
+
+full_ag_matrix <- readRDS("ag_data/full_feat_ag_matrix.rds")
+probe_df <- data.frame("Probe" = remove_suffix(row.names(full_ag_matrix)), full_ag_matrix)
+
+# Aggregate by probe
+aggregated_matrix <- probe_df %>%
+  group_by(Probe) %>%
+  summarise(across(everything(), sum)) %>%
+  as.data.frame()
+
+rownames(aggregated_matrix) <- aggregated_matrix$Probe
+aggregated_matrix <- aggregated_matrix[,-1]
+
+# Load enrichment data
+ABMR_enrich <- read_csv("enrichment_results/Ag_earlyABMR.hypergeomV2.csv")
+NR_enrich <- read_csv("enrichment_results/Ag_earlyNR.hypergeomV2.csv")
+
+# Generate early enrichment matrices
+early_matrices <- get_enrich_matrices(aggregated_matrix, ABMR_enrich, NR_enrich)
+
+# Load early patient data and create annotation table
+early_ag_data <- readRDS("ag_data/patient_early_ag_data.rds")
+annotation_table_early <- data.frame(
+  Antigen = c(early_ag_data$set_NR, early_ag_data$shared, early_ag_data$set_R),
+  Label = c(rep("NR DSAs", length(early_ag_data$set_NR)),
+            rep("Shared", length(early_ag_data$shared)),
+            rep("Rejector DSAs", length(early_ag_data$set_R)))
+)
+
+# Annotate early matrices
+hist_type_early <- annotation_table_early[match(colnames(early_matrices$enrich_mtx), annotation_table_early$Antigen),]$Label
+hist_type_early[is.na(hist_type_early)] <- "Non-DSA"
+hist_type_factor_early <- factor(hist_type_early, levels = c("Non-DSA", "Shared", "Rejector DSAs", "NR DSAs"))
+
+# Heatmap annotation for early patient DSAs
+ha_co_early <- HeatmapAnnotation(
+  early = hist_type_factor_early,
+  col = list(early = c("Shared" = "darkorange", "Rejector DSAs" = colors[2], "NR DSAs" = colors[1], "Non-DSA" = "lightgrey")),
+  which = "column", annotation_label = "early Patient DSAs",
+  show_annotation_name = FALSE, show_legend = TRUE
+)
+
+# Create heatmap for early enrichment
+Heatmap(
+  early_matrices$enrich_mtx, 
+  col = c("white", "#CFD6DC"), name = "counts", 
+  show_row_dend = FALSE, show_column_dend = FALSE,
+  cluster_columns = FALSE, cluster_rows = TRUE,
+  column_split = hist_type_factor_early,
+  top_annotation = ha_co_early,
+  column_gap = unit(1, "mm"),
+  rect_gp = gpar(col = "black", lwd = 1),
+  row_names_gp = gpar(fontsize = 10), row_names_side = "left",
+  row_title = "Probes", row_title_side = "left",
+  column_names_gp = gpar(fontsize = 10),
+  cell_fun = function(j, i, x, y, width, height, fill) {
+    grid.rect(x, y, width, height, gp = gpar(fill = fill, col = "black"))
+    if (early_matrices$highlight_ABMR[i, j] < 0) grid.rect(x, y, width, height, gp = gpar(fill = colors[2], col = "black"))
+    if (early_matrices$highlight_NR[i, j] < 0) grid.rect(x, y, width, height, gp = gpar(fill = colors[1], col = "black"))
+  }
+)
+
+```
+
+#EARLY: SLIDE probe-ag full
+```{r}
+# Extract relevant columns and rows
+early_ag <- colnames(early_matrices$enrich_mtx)
+early_probe <- rownames(early_matrices$enrich_mtx)
+
+# Filter full antigen matrix and load features
+early_ag_full <- full_ag_matrix[, early_ag]
+early_table <- readRDS("~/JishnuLab/ABomics_cleaned/FINAL_MODELS/Abomics/Early/SLIDE/plotSigGenes_data.RDS")
+early_feats <- unique(na.omit(early_table$names))
+
+# Filter matrix by features
+early_ag_matrix <- early_ag_full[early_feats,]
+# Highlight probes
+# Generate low-frequency early enrichment matrices (IgM, SNA filtering)
+early_matrices_lf <- get_enrich_matrices_lf(early_ag_matrix, ABMR_enrich, NR_enrich)
+
+#############################
+# Plotting all early_feats
+#############################
+
+
+# Recode colors for early probes and create histology type factor
+early_colors <- recode(early_table[match(row.names(early_matrices_lf$enrich_mtx), early_table$names),]$color, 
+                       "Blue" = "NR", "Red" = "Rejector", 'white' = "Non-DSA")
+
+hist_type <- annotation_table_early[match(colnames(early_matrices_lf$enrich_mtx), annotation_table_early$Antigen),]$Label
+hist_type[is.na(hist_type)] <- "Non-DSA"
+hist_type_factor <- factor(hist_type, levels = c("Non-DSA", "Shared", "Rejector DSAs", "NR DSAs"))
+
+# Create annotations for heatmap (column and row annotations)
+column_annotation <- HeatmapAnnotation(
+  early = hist_type_factor,
+  col = list(early = c("Shared" = "darkorange", "Rejector DSAs" = "#CA4F73", "NR DSAs" = "#eebc59", "Non-DSA" = "lightgray")),
+  which = "column",
+  annotation_label = "early DSAs",
+  show_annotation_name = TRUE
+)
+
+row_annotation <- HeatmapAnnotation(
+  SLIDE = early_colors,
+  col = list(SLIDE = c("NR" = colors[1], "Rejector" = colors[2], "Non-DSA" = "lightgray")),
+  which = "row"
+)
+
+# Extract probe names and antigen types
+early_probes <- remove_suffix(rownames(early_matrices_lf$enrich_mtx))
+antigen_types <- extract_letters(colnames(early_matrices_lf$enrich_mtx))
+
+# Plot heatmap for IgM and SNA
+Heatmap(
+  early_matrices_lf$enrich_mtx,
+  column_split = hist_type_early,
+  col = c("white", "#CFD6DC"),
+  name = "counts",
+  show_row_dend = FALSE,
+  show_column_dend = FALSE,
+  cluster_columns = FALSE,
+  cluster_rows = TRUE,
+  #row_split = early_probes,
+  top_annotation = ha_col_early,
+  #left_annotation = ha_row_earlylf,
+  column_gap = unit(3, "mm"),
+  rect_gp = gpar(col = "black", lwd = 1),
+  row_names_side = "left",
+  row_names_gp = gpar(fontsize = 10),
+  column_names_gp = gpar(fontsize = 12),
+  cell_fun = function(j, i, x, y, width, height, fill) {
+    grid.rect(x, y, width, height, gp = gpar(fill = fill, col = "black"))
+    if (early_matrices_lf$highlight_ABMR[i, j] < 0) {
+      grid.rect(x, y, width, height, gp = gpar(fill = colors[2], col = "black"))
+    }
+    if (early_matrices_lf$highlight_NR[i, j] < 0) {
+      grid.rect(x, y, width, height, gp = gpar(fill = colors[1], col = "black"))
+    }
+  }
+)
+```
+
+# EARLY: SLIDE probe-antigen highlighted - selected
+```{r}
+# Extract relevant columns and rows
+early_ag <- colnames(early_matrices$enrich_mtx)
+early_probe <- rownames(early_matrices$enrich_mtx)
+
+# Filter full antigen matrix and load features
+early_ag_mtx <- full_ag_matrix[, early_ag]
+early_table <- readRDS("~/JishnuLab/ABomics_cleaned/FINAL_MODELS/Abomics/Early/SLIDE/plotSigGenes_data.RDS")
+early_feats <- unique(na.omit(early_table$names))
+
+# Filter matrix by features
+early_ag_matrix <- early_ag_mtx[early_feats,]
+# Highlight probes
+# Generate low-frequency early enrichment matrices (IgM, SNA filtering)
+early_matrices_lf <- get_enrich_matrices_lf(early_ag_matrix, ABMR_enrich, NR_enrich)
+
+#############################
+# Plotting IgM and SNA only
+#############################
+
+filtered_matrices <- lapply(early_matrices_lf, function(matrix) {
+  matrix[grepl("^(IgM|SNA)", rownames(matrix)), , drop = FALSE]
+})
+
+
+# Recode colors for early probes and create histology type factor
+early_colors <- recode(early_table[match(row.names(filtered_matrices$enrich_mtx), early_table$names),]$color, 
+                       "Blue" = "NR", "Red" = "Rejector", 'white' = "Non-DSA")
+
+hist_type <- annotation_table_early[match(colnames(filtered_matrices$enrich_mtx), annotation_table_early$Antigen),]$Label
+hist_type[is.na(hist_type)] <- "Non-DSA"
+hist_type_factor <- factor(hist_type, levels = c("Non-DSA", "Shared", "Rejector DSAs", "NR DSAs"))
+
+# Create annotations for heatmap (column and row annotations)
+column_annotation <- HeatmapAnnotation(
+  early = hist_type_factor,
+  col = list(early = c("Shared" = "darkorange", "Rejector DSAs" = "#CA4F73", "NR DSAs" = "#eebc59", "Non-DSA" = "lightgray")),
+  which = "column",
+  annotation_label = "early DSAs",
+ show_legend = FALSE
+)
+
+row_annotation <- HeatmapAnnotation(
+  SLIDE = early_colors,
+  col = list(SLIDE = c("NR" = colors[1], "Rejector" = colors[2], "Non-DSA" = "lightgray")),
+  which = "row",  show_legend = FALSE
+)
+
+# Extract probe names and antigen types
+early_probes <- remove_suffix(rownames(filtered_matrices$enrich_mtx))
+antigen_types <- extract_letters(colnames(filtered_matrices$enrich_mtx))
+
+# Plot heatmap for IgM and SNA
+e_lf_hm <- Heatmap(
+  filtered_matrices$enrich_mtx,
+  column_split = hist_type_early,
+  col = c("white", "#CFD6DC"),
+  name = "counts",
+  show_row_dend = FALSE,
+  show_column_dend = FALSE,
+  cluster_columns = FALSE,
+  cluster_rows = TRUE,
+  row_split = early_probes,
+  top_annotation = ha_col_early,
+  left_annotation = ha_row_earlylf,
+  column_gap = unit(3, "mm"),
+  rect_gp = gpar(col = "black", lwd = 1),
+  row_names_side = "left",
+  row_names_gp = gpar(fontsize = 10),
+  column_names_gp = gpar(fontsize = 12),
+  cell_fun = function(j, i, x, y, width, height, fill) {
+    grid.rect(x, y, width, height, gp = gpar(fill = fill, col = "black"))
+    if (filtered_matrices$highlight_ABMR[i, j] < 0) {
+      grid.rect(x, y, width, height, gp = gpar(fill = colors[2], col = "black"))
+    }
+    if (filtered_matrices$highlight_NR[i, j] < 0) {
+      grid.rect(x, y, width, height, gp = gpar(fill = colors[1], col = "black"))
+    }
+  }
+)
+e_lf_hm
+```
+# EARLY (early_feats) individual corr plots
+```{r}
+e_f = rownames(filtered_matrices$enrich_mtx)
+earlyNR_ef <- X2 %>% select(e_f) # non rejectors
+earlyR_ef <- X1 %>% select(e_f) # non rejectors
+
+# plots
+p1_NR<- AB_heatmap(earlyNR_ef)
+p2_R <-  AB_heatmap(earlyR_ef)
+draw(p1_NR + p2_R, column_title = " Early Non Rejectors vs. Early Rejectors ",ht_gap = unit(0.5, "cm"))
+```
+
+# EARLY 3 PLOTS COMBINED
+```{r}
+folder = "~/JishnuLab/ABomics_cleaned/Analyses/antigens/figures/early_3plot.pdf"
+pdf(folder, width = 13, height = 4)  # Specify file name and dimensions
+draw(e_lf_hm +  p1_NR + p2_R, ht_gap = unit(0.5, "cm"))  # Plot the heatmap to the PDF
+dev.off()  # Close the PDF device
+# # # 
+```
+
+# LATE: Probe-antigen aggregated
+```{r}
+# Load required data
+setwd("~/JishnuLab/ABomics_cleaned/Analyses/antigens/")
+
+full_ag_matrix <- readRDS("ag_data/full_feat_ag_matrix.rds")
+probe_df <- data.frame("Probe" = remove_suffix(row.names(full_ag_matrix)), full_ag_matrix)
+
+# Aggregate by probe
+aggregated_matrix <- probe_df %>%
+  group_by(Probe) %>%
+  summarise(across(everything(), sum)) %>%
+  as.data.frame()
+
+rownames(aggregated_matrix) <- aggregated_matrix$Probe
+aggregated_matrix <- aggregated_matrix[,-1]
+
+# Load enrichment data
+ABMR_enrich <- read_csv("enrichment_results/Ag_lateABMR.hypergeomV2.csv")
+NR_enrich <- read_csv("enrichment_results/Ag_lateNR.hypergeomV2.csv")
+
+# Generate late enrichment matrices
+late_matrices <- get_enrich_matrices(aggregated_matrix, ABMR_enrich, NR_enrich)
+
+# Load late patient data and create annotation table
+late_ag_data <- readRDS("ag_data/patient_late_ag_data.rds")
+annotation_table_late <- data.frame(
+  Antigen = c(late_ag_data$set_NR, late_ag_data$shared, late_ag_data$set_R),
+  Label = c(rep("NR DSAs", length(late_ag_data$set_NR)),
+            rep("Shared", length(late_ag_data$shared)),
+            rep("Rejector DSAs", length(late_ag_data$set_R)))
+)
+
+# Annotate late matrices
+hist_type_late <- annotation_table_late[match(colnames(late_matrices$enrich_mtx), annotation_table_late$Antigen),]$Label
+hist_type_late[is.na(hist_type_late)] <- "Non-DSA"
+hist_type_factor_late <- factor(hist_type_late, levels = c("Non-DSA", "Shared", "Rejector DSAs", "NR DSAs"))
+
+# Heatmap annotation for late patient DSAs
+ha_co_late <- HeatmapAnnotation(
+  late = hist_type_factor_late,
+  col = list(late = c("Shared" = "darkorange", "Rejector DSAs" = colors[2], "NR DSAs" = colors[1], "Non-DSA" = "lightgrey")),
+  which = "column", annotation_label = "late Patient DSAs",
+  show_annotation_name = FALSE, show_legend = TRUE
+)
+
+# Create heatmap for late enrichment
+Heatmap(
+  late_matrices$enrich_mtx, 
+  col = c("white", "#CFD6DC"), name = "counts", 
+  show_row_dend = FALSE, show_column_dend = FALSE,
+  cluster_columns = FALSE, cluster_rows = TRUE,
+  column_split = hist_type_factor_late,
+  top_annotation = ha_co_late,
+  column_gap = unit(1, "mm"),
+  rect_gp = gpar(col = "black", lwd = 1),
+  row_names_gp = gpar(fontsize = 10), row_names_side = "left",
+  row_title = "Probes", row_title_side = "left",
+  column_names_gp = gpar(fontsize = 10),
+  cell_fun = function(j, i, x, y, width, height, fill) {
+    grid.rect(x, y, width, height, gp = gpar(fill = fill, col = "black"))
+    if (late_matrices$highlight_ABMR[i, j] < 0) grid.rect(x, y, width, height, gp = gpar(fill = colors[2], col = "black"))
+    if (late_matrices$highlight_NR[i, j] < 0) grid.rect(x, y, width, height, gp = gpar(fill = colors[1], col = "black"))
+  }
+)
+
+```
+
+
+#late: SLIDE probe-ag full
+```{r}
+# Extract relevant columns and rows
+late_ag <- colnames(late_matrices$enrich_mtx)
+late_probe <- rownames(late_matrices$enrich_mtx)
+
+# Filter full antigen matrix and load features
+late_ag_full <- full_ag_matrix[, late_ag]
+late_table <- readRDS("~/JishnuLab/ABomics_cleaned/FINAL_MODELS/Abomics/late/SLIDE/plotSigGenes_data.RDS")
+late_feats <- unique(na.omit(late_table$names))
+
+# Filter matrix by features
+late_ag_matrix <- late_ag_full[late_feats,]
+# Highlight probes
+# Generate low-frequency late enrichment matrices (IgM, SNA filtering)
+late_matrices_lf <- get_enrich_matrices_lf(late_ag_matrix, ABMR_enrich, NR_enrich)
+
+#############################
+# Plotting all late_feats
+#############################
+
+
+# Recode colors for late probes and create histology type factor
+late_colors <- recode(late_table[match(row.names(late_matrices_lf$enrich_mtx), late_table$names),]$color, 
+                       "Blue" = "NR", "Red" = "Rejector", 'white' = "Non-DSA")
+
+hist_type <- annotation_table_late[match(colnames(late_matrices_lf$enrich_mtx), annotation_table_late$Antigen),]$Label
+hist_type[is.na(hist_type)] <- "Non-DSA"
+hist_type_factor <- factor(hist_type, levels = c("Non-DSA", "Shared", "Rejector DSAs", "NR DSAs"))
+
+# Create annotations for heatmap (column and row annotations)
+column_annotation <- HeatmapAnnotation(
+  late = hist_type_factor,
+  col = list(late = c("Shared" = "darkorange", "Rejector DSAs" = "#CA4F73", "NR DSAs" = "#eebc59", "Non-DSA" = "lightgray")),
+  which = "column",
+  annotation_label = "late DSAs",
+  show_annotation_name = TRUE
+)
+
+row_annotation <- HeatmapAnnotation(
+  SLIDE = late_colors,
+  col = list(SLIDE = c("NR" = colors[1], "Rejector" = colors[2], "Non-DSA" = "lightgray")),
+  which = "row"
+)
+
+# Extract probe names and antigen types
+late_probes <- remove_suffix(rownames(late_matrices_lf$enrich_mtx))
+antigen_types <- extract_letters(colnames(late_matrices_lf$enrich_mtx))
+
+Heatmap(
+  late_matrices_lf$enrich_mtx,
+  column_split = hist_type_late,
+  col = c("white", "#CFD6DC"),
+  name = "counts",
+  show_row_dend = FALSE,
+  show_column_dend = FALSE,
+  cluster_columns = FALSE,
+  cluster_rows = TRUE,
+  #row_split = early_probes,
+  top_annotation =column_annotation,
+  #left_annotation = ha_row_latelf,
+  column_gap = unit(3, "mm"),
+  rect_gp = gpar(col = "black", lwd = 1),
+  row_names_side = "left",
+  row_names_gp = gpar(fontsize = 10),
+  column_names_gp = gpar(fontsize = 12),
+  cell_fun = function(j, i, x, y, width, height, fill) {
+    grid.rect(x, y, width, height, gp = gpar(fill = fill, col = "black"))
+    if (late_matrices_lf$highlight_ABMR[i, j] < 0) {
+      grid.rect(x, y, width, height, gp = gpar(fill = colors[2], col = "black"))
+    }
+    if (late_matrices_lf$highlight_NR[i, j] < 0) {
+      grid.rect(x, y, width, height, gp = gpar(fill = colors[1], col = "black"))
+    }
+  }
+)
+```
+
+# LATE: SLIDE probe-antigen highlighted - FCR3A IgG
+# dp, DQ9, DR53, DR8
+```{r}
+# Extract relevant columns and rows
+late_ag <- colnames(late_matrices$enrich_mtx)
+late_probe <- rownames(late_matrices$enrich_mtx)
+
+# Filter full antigen matrix and load features
+late_ag_mtx <- full_ag_matrix[, late_ag]
+late_table <- readRDS("~/JishnuLab/ABomics_cleaned/FINAL_MODELS/Abomics/late/SLIDE/plotSigGenes_data.RDS")
+late_feats <- unique(na.omit(late_table$names))
+
+# Filter matrix by features
+late_ag_matrix <- late_ag_mtx[late_feats,]
+# Highlight probes
+# Generate low-frequency late enrichment matrices (IgM, SNA filtering)
+late_matrices_lf <- get_enrich_matrices_lf(late_ag_matrix, ABMR_enrich, NR_enrich)
+
+#############################
+# Plotting FcR3A IgGonly
+#############################
+
+filt_mat_late <- lapply( late_matrices_lf, function(x) {
+  # Get row names that start with "IGM"
+  rows_to_keep <- grepl("^(FcR3A|IgG_)", rownames(x))
+  #rows_to_keep <- grepl("^(IgM|C1Q)", rownames(x))
+  # Subset the matrix to keep only these rows
+  # Get column names that start with "A", "B", or "C"
+  cols_to_keep <- grepl("^(DP)", colnames(x))
+  ag_keep = c("DQ9", "DR53", "DR8")
+  # Subset the matrix to keep only these rows and columns
+  x[rows_to_keep,c(cols_to_keep, ag_keep), drop = FALSE]
+  
+})
+
+# filt_mat_late <- lapply(late_matrices_lf, function(matrix) {
+#   matrix[grepl("^(FcR3A|IgG_)", rownames(matrix)), , drop = FALSE]
+# })
+
+
+# Recode colors for late probes and create histology type factor
+late_colors <- recode(late_table[match(row.names(filt_mat_late$enrich_mtx), late_table$names),]$color, 
+                       "Blue" = "NR", "Red" = "Rejector", 'white' = "Non-DSA")
+
+hist_type <- annotation_table_late[match(colnames(filt_mat_late$enrich_mtx), annotation_table_late$Antigen),]$Label
+hist_type[is.na(hist_type)] <- "Non-DSA"
+hist_type_factor <- factor(hist_type, levels = c("Non-DSA", "Shared", "Rejector DSAs", "NR DSAs"))
+
+# Create annotations for heatmap (column and row annotations)
+col_late <- HeatmapAnnotation(
+  late = hist_type_factor,
+  col = list(late = c("Shared" = "darkorange", "Rejector DSAs" = "#CA4F73", "NR DSAs" = "#eebc59", "Non-DSA" = "lightgray")),
+  which = "column",
+  annotation_label = "late DSAs",
+ show_legend = FALSE
+)
+
+row_late <- HeatmapAnnotation(
+  SLIDE = late_colors,
+  col = list(SLIDE = c("NR" = colors[1], "Rejector" = colors[2], "Non-DSA" = "lightgray")),
+  which = "row",  show_legend = FALSE
+)
+
+# Extract probe names and antigen types
+late_probes <- remove_suffix(rownames(filt_mat_late$enrich_mtx))
+antigen_types <- extract_letters(colnames(filt_mat_late$enrich_mtx))
+
+# Plot heatmap for IgM and SNA
+l_lf_hm <- Heatmap(
+  filt_mat_late$enrich_mtx,
+  column_split = hist_type_factor,
+  col = c("white", "#CFD6DC"),
+  name = "counts",
+  show_row_dend = FALSE,
+  show_column_dend = FALSE,
+  cluster_columns = FALSE,
+  cluster_rows = TRUE,
+  row_split = late_probes,
+  top_annotation = col_late,
+  left_annotation = row_late,
+  column_gap = unit(3, "mm"),
+  rect_gp = gpar(col = "black", lwd = 1),
+  row_names_side = "left",
+  row_names_gp = gpar(fontsize = 10),
+  column_names_gp = gpar(fontsize = 12),
+  cell_fun = function(j, i, x, y, width, height, fill) {
+    grid.rect(x, y, width, height, gp = gpar(fill = fill, col = "black"))
+    if (filt_mat_late$highlight_ABMR[i, j] < 0) {
+      grid.rect(x, y, width, height, gp = gpar(fill = colors[2], col = "black"))
+    }
+    if (filt_mat_late$highlight_NR[i, j] < 0) {
+      grid.rect(x, y, width, height, gp = gpar(fill = colors[1], col = "black"))
+    }
+  }
+)
+l_lf_hm
+```
+# LATE (fcr igg) individual corr plots / 3 plots combined
+```{r}
+l_f = rownames(filt_mat_late$enrich_mtx)
+lateNR_lf <- X4 %>% select(l_f) # non rejectors
+lateR_lf <- X3 %>% select(l_f) # non rejectors
+
+# plots
+p1_NR<- AB_heatmap(lateNR_lf)
+p2_R <-  AB_heatmap(lateR_lf)
+#draw(p1_NR + p2_R, column_title = " late Non Rejectors vs. late Rejectors ",ht_gap = unit(0.5, "cm"))
+
+
+folder = "~/JishnuLab/ABomics_cleaned/Analyses/antigens/figures/late_fcrIgG_3plot.pdf"
+pdf(folder, width = 9.5, height = 4)  # Specify file name and dimensions
+draw(l_lf_hm +  p1_NR + p2_R, ht_gap = unit(0.5, "cm"))  # Plot the heatmap to the PDF
+dev.off()  # Close the PDF device
+# # # 
+```
+
+
+# LATE: IgG IGM
+# LATE: SLIDE probe-antigen highlighted - igm c1q
+```{r}
+# Extract relevant columns and rows
+late_ag <- colnames(late_matrices$enrich_mtx)
+late_probe <- rownames(late_matrices$enrich_mtx)
+
+# Filter full antigen matrix and load features
+late_ag_mtx <- full_ag_matrix[, late_ag]
+late_table <- readRDS("~/JishnuLab/ABomics_cleaned/FINAL_MODELS/Abomics/late/SLIDE/plotSigGenes_data.RDS")
+late_feats <- unique(na.omit(late_table$names))
+
+# Filter matrix by features
+late_ag_matrix <- late_ag_mtx[late_feats,]
+# Highlight probes
+# Generate low-frequency late enrichment matrices (IgM, SNA filtering)
+late_matrices_lf <- get_enrich_matrices_lf(late_ag_matrix, ABMR_enrich, NR_enrich)
+
+#############################
+# Plotting FcR3A IgGonly
+#############################
+
+filt_mat_late <- lapply( late_matrices_lf, function(x) {
+  # Get row names that start with "IGM"
+  rows_to_keep <- grepl("^(IgM|C1Q)", rownames(x))
+  # Subset the matrix to keep only these rows
+  #cols_to_keep <- grepl("^(DP)", colnames(x))
+    cols_to_keep <- grepl("^(A)", colnames(x))
+
+  # Subset the matrix to keep only these rows and columns
+  x[rows_to_keep, cols_to_keep, drop = FALSE]
+  
+})
+
+
+# Recode colors for late probes and create histology type factor
+late_colors <- recode(late_table[match(row.names(filt_mat_late$enrich_mtx), late_table$names),]$color, 
+                       "Blue" = "NR", "Red" = "Rejector", 'white' = "Non-DSA")
+
+hist_type <- annotation_table_late[match(colnames(filt_mat_late$enrich_mtx), annotation_table_late$Antigen),]$Label
+hist_type[is.na(hist_type)] <- "Non-DSA"
+hist_type_factor <- factor(hist_type, levels = c("Non-DSA", "NR DSAs", "Rejector DSAs", "Shared"))
+
+# Create annotations for heatmap (column and row annotations)
+col_late <- HeatmapAnnotation(
+  late = hist_type_factor,
+  col = list(late = c("Shared" = "darkorange", "Rejector DSAs" = "#CA4F73", "NR DSAs" = "#eebc59", "Non-DSA" = "lightgray")),
+  which = "column",
+  annotation_label = "late DSAs",
+ show_legend = FALSE
+)
+
+row_late <- HeatmapAnnotation(
+  SLIDE = late_colors,
+  col = list(SLIDE = c("NR" = colors[1], "Rejector" = colors[2], "Non-DSA" = "lightgray")),
+  which = "row",  show_legend = FALSE
+)
+
+# Extract probe names and antigen types
+late_probes <- remove_suffix(rownames(filt_mat_late$enrich_mtx))
+antigen_types <- extract_letters(colnames(filt_mat_late$enrich_mtx))
+
+# Plot heatmap for IgM and SNA
+l_lf_hm <- Heatmap(
+  filt_mat_late$enrich_mtx,
+  column_split = hist_type_factor,
+  col = c("white", "#CFD6DC"),
+  name = "counts",
+  show_row_dend = FALSE,
+  show_column_dend = FALSE,
+  cluster_columns = FALSE,
+  cluster_rows = TRUE,
+  row_split = late_probes,
+  top_annotation = col_late,
+  left_annotation = row_late,
+  column_gap = unit(3, "mm"),
+  rect_gp = gpar(col = "black", lwd = 1),
+  row_names_side = "left",
+  row_names_gp = gpar(fontsize = 10),
+  column_names_gp = gpar(fontsize = 12),
+  cell_fun = function(j, i, x, y, width, height, fill) {
+    grid.rect(x, y, width, height, gp = gpar(fill = fill, col = "black"))
+    if (filt_mat_late$highlight_ABMR[i, j] < 0) {
+      grid.rect(x, y, width, height, gp = gpar(fill = colors[2], col = "black"))
+    }
+    if (filt_mat_late$highlight_NR[i, j] < 0) {
+      grid.rect(x, y, width, height, gp = gpar(fill = colors[1], col = "black"))
+    }
+  }
+)
+l_lf_hm
+```
+# LATE (fcr igg) individual corr plots / 3 plots combined
+```{r}
+l_f = rownames(filt_mat_late$enrich_mtx)
+lateNR_lf <- X4 %>% select(l_f) # non rejectors
+lateR_lf <- X3 %>% select(l_f) # non rejectors
+
+# plots
+p1_NR<- AB_heatmap(lateNR_lf, thresh = 0.01)
+p2_R <-  AB_heatmap(lateR_lf, thresh = 0.01)
+#draw(p1_NR + p2_R, column_title = " late Non Rejectors vs. late Rejectors ",ht_gap = unit(0.5, "cm"))
+
+
+folder = "~/JishnuLab/ABomics_cleaned/Analyses/antigens/figures/late_c1qigm_3plot.pdf"
+pdf(folder, width = 14, height = 5.5)  # Specify file name and dimensions
+draw(l_lf_hm +  p1_NR + p2_R, ht_gap = unit(0.5, "cm"))  # Plot the heatmap to the PDF
+dev.off()  # Close the PDF device
+# # # 
+```
+
+
